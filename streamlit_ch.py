@@ -203,14 +203,11 @@ if (st.button('Calculate')):
 
 
 
-    ################## GP2 Volume request ##########################
+    ################## GP2 Volume Savings ##########################
     volume_response = requests.get("https://chapi.cloudhealthtech.com/api/search?&api_version=2&client_api_id=" + client_id + "&name=AwsVolume&query=volume_type='gp2'+and+is_active=1&fields=volume_type,size,name,price_per_month,in_use,account.name", headers=my_headers)
 
     #Converts JSON to a list of dictionaries with the information of every active volume 
     volumes = json.loads(volume_response.text)
-
-    #Obtain customer name 
-    customer = volumes[0]['account']['name'].split('-')[0].strip()
 
     #Initialize gp2 count and cost
     attached_gp2_volumes = 0
@@ -218,7 +215,7 @@ if (st.button('Calculate')):
 
     #Only count if volume is attached and sum monthly costs of attached volumes 
     for volume in volumes:
-        if volume["in_use"]:
+        if (volume["in_use"] and volume["size"] < 1000):
             attached_gp2_volumes += 1
             cost_of_volumes += float(volume["price_per_month"][1:].replace(",", ""))
 
@@ -227,10 +224,39 @@ if (st.button('Calculate')):
 
     #Find largest volume 
     sizeList = [volume['size'] for volume in volumes]
-    largest = max(sizeList)
+    largest = max(sizeList) if len(sizeList) > 0 else 0
 
     #Print analysis
     st.subheader("GP2 Volume Information")
-    st.text("Number of attached gp2 volumes: " + str(attached_gp2_volumes))
+    st.text("Number of attached gp2 volumes under 1TB: " + str(attached_gp2_volumes))
     st.text("Monthly savings by converting to gp3: " + str(savings))
-    st.text("Largest Volume: " + str(largest) + "GB")
+    st.text("Largest GP2 Volume: " + str(largest) + "GB")
+
+
+
+    ################## Unattached Volume Savings ##########################
+    uav_response = requests.get("https://chapi.cloudhealthtech.com/api/search?&api_version=2&client_api_id=" + client_id + "&name=AwsVolume&query=is_active=1&fields=volume_type,size,name,price_per_month,in_use,account.name", headers=my_headers)
+
+    #Converts JSON to a list of dictionaries with the information of every active volume 
+    uav_volumes = json.loads(uav_response.text)
+
+    #Initialize gp2 count and cost
+    unattached_volumes = 0
+    uav_savings = 0
+
+    #Only count if volume is attached and sum monthly costs of attached volumes 
+    for volume in uav_volumes:
+        if not volume["in_use"]:
+            unattached_volumes += 1
+            uav_savings += float(volume["price_per_month"][1:].replace(",", ""))
+
+    #Find largest unattached volume 
+    uav_sizeList = [volume['size'] for volume in uav_volumes if not volume["in_use"]]
+    uav_largest = max(uav_sizeList) if len(uav_sizeList) > 0 else 0
+
+    uav_savings = round(uav_savings, 2)
+    #Print analysis
+    st.subheader("Unattached Volume Information")
+    st.text("Number of unattached volumes: " + str(unattached_volumes))
+    st.text("Monthly savings by deleting volumes: " + str(uav_savings))
+    st.text("Largest Unattached Volume: " + str(uav_largest) + "GB")
